@@ -1,6 +1,8 @@
+'use client';
 import Link from "next/link";
 import Image from "next/image";
 import Logo from '@/public/icons/logo.png';
+import posthog from 'posthog-js';
 
 export default function Navbar() {
     return (
@@ -11,10 +13,10 @@ export default function Navbar() {
                     <p>DevEvent</p>
                 </Link>
                 <ul>
-                    <Link href="/">Home </Link>
-                    <Link href="/events">Events</Link>
-                    <Link href="/about">About</Link>
-                    <Link href="/contact">Contact</Link>
+                    <Link href="/" onClick={() => posthog.capture('nav_link_clicked', { label: 'Home', href: '/' })}>Home </Link>
+                    <Link href="/events" onClick={() => posthog.capture('nav_link_clicked', { label: 'Events', href: '/events' })}>Events</Link>
+                    <Link href="/about" onClick={() => posthog.capture('nav_link_clicked', { label: 'About', href: '/about' })}>About</Link>
+                    <Link href="/contact" onClick={() => posthog.capture('nav_link_clicked', { label: 'Contact', href: '/contact' })}>Contact</Link>
                 </ul>
             </nav>
         </header>
