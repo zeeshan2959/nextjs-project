@@ -4,6 +4,8 @@ import { use, useEffect, useState, ChangeEvent, FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ServerDown from "@/components/ServerDown";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Event {
   title: string;
@@ -34,9 +36,11 @@ const INITIAL_BOOKING: BookingForm = { name: "", email: "", tickets: 1 };
 const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = use(params);
   const router = useRouter();
+  const { isAuthenticated, authHeader } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [serverDown, setServerDown] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -69,7 +73,11 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
         const data = await response.json();
         setEvent(data.data);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Unexpected error");
+        if (err instanceof TypeError) {
+          setServerDown(true);
+        } else {
+          setError(err instanceof Error ? err.message : "Unexpected error");
+        }
       } finally {
         setLoading(false);
       }
@@ -92,7 +100,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
     try {
       const res = await fetch("http://localhost:5000/api/bookings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({ eventSlug: slug, ...booking }),
       });
       const data = await res.json();
@@ -112,6 +120,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
     try {
       const res = await fetch(`http://localhost:5000/api/events/${slug}`, {
         method: "DELETE",
+        headers: { ...authHeader() },
       });
       if (!res.ok) throw new Error("Failed to delete event");
       router.push("/");
@@ -130,6 +139,8 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
     );
   }
 
+  if (serverDown) return <ServerDown />;
+
   if (error || !event) {
     return (
       <div className="flex justify-center items-center min-h-[40vh]">
@@ -144,39 +155,41 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
         <h1>{event.title}</h1>
         <p>{event.description}</p>
 
-        <div className="flex gap-3 mt-6">
-          <Link
-            href={`/events/${slug}/edit`}
-            className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors text-sm font-medium"
-          >
-            Edit Event
-          </Link>
-          {confirmDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-white/60">Are you sure?</span>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors text-sm font-medium"
-              >
-                {deleting ? "Deleting…" : "Yes, delete"}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40 transition-colors text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="px-5 py-2 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors text-sm font-medium"
+        {isAuthenticated && (
+          <div className="flex gap-3 mt-6">
+            <Link
+              href={`/events/${slug}/edit`}
+              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors text-sm font-medium"
             >
-              Delete Event
-            </button>
-          )}
-        </div>
+              Edit Event
+            </Link>
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-white/60">Are you sure?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors text-sm font-medium"
+                >
+                  {deleting ? "Deleting…" : "Yes, delete"}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="px-5 py-2 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors text-sm font-medium"
+              >
+                Delete Event
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <div className="details">
         <div className="content">
@@ -192,7 +205,17 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
           <h2>Book a Ticket</h2>
           <p className="text-white/50 text-sm mb-6">Secure your spot for this event.</p>
 
-          {bookingSuccess ? (
+          {!isAuthenticated ? (
+            <div className="rounded-xl border border-white/10 bg-white/5 px-6 py-8 text-center space-y-3">
+              <p className="text-white/60 text-sm">You must be signed in to book a ticket.</p>
+              <Link
+                href={`/login?from=/events/${slug}`}
+                className="inline-block mt-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors text-sm font-medium"
+              >
+                Sign In to Book
+              </Link>
+            </div>
+          ) : bookingSuccess ? (
             <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-6 py-8 text-center space-y-3">
               <p className="text-2xl">🎉</p>
               <p className="font-semibold text-green-400">You&apos;re booked!</p>

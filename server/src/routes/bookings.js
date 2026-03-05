@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 const Booking = require("../models/Booking");
 const Event = require("../models/Event");
+const auth = require("../middleware/auth");
 
-// POST /api/bookings — create a booking
-router.post("/", async (req, res) => {
+// POST /api/bookings — create a booking (auth required)
+router.post("/", auth, async (req, res) => {
   try {
     const { eventSlug, name, email, tickets } = req.body;
 

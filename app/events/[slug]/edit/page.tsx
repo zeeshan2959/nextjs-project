@@ -1,22 +1,32 @@
 'use client';
 
-import { use, useEffect, useState, ChangeEvent, FormEvent } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ServerDown from '@/components/ServerDown';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { useFormik } from 'formik';
+import * as Yup from 'yup';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-interface EventFormData {
-  title: string;
-  image: string;
-  date: string;
-  time: string;
-  slug: string;
-  location: string;
-  description: string;
-}
-
-interface ApiError {
-  success: false;
-  message: string;
-}
+const EVENT_TYPES = [
+  { value: 'hackathon', label: 'Hackathon' },
+  { value: 'meetup', label: 'Meetup' },
+  { value: 'conference', label: 'Conference' },
+  { value: 'workshop', label: 'Workshop' },
+  { value: 'webinar', label: 'Webinar' },
+  { value: 'other', label: 'Other' },
+];
 
 function slugify(value: string): string {
   return value
@@ -26,14 +36,40 @@ function slugify(value: string): string {
     .replace(/\s+/g, '-');
 }
 
+const validationSchema = Yup.object({
+  title: Yup.string().required('Title is required'),
+  image: Yup.string().url('Must be a valid URL').required('Image URL is required'),
+  date: Yup.string().required('Date is required'),
+  time: Yup.string().required('Time is required'),
+  location: Yup.string().required('Location is required'),
+  slug: Yup.string()
+    .matches(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens')
+    .required('Slug is required'),
+  eventType: Yup.string().required('Event type is required'),
+  description: Yup.string(),
+});
+
 export default function EditEventPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const router = useRouter();
+  const { authHeader } = useAuth();
+  const { isAuthenticated } = useRequireAuth();
 
-  const [form, setForm] = useState<EventFormData | null>(null);
+  const EMPTY_VALUES = {
+    title: '',
+    image: '',
+    date: '',
+    time: '',
+    slug: '',
+    location: '',
+    eventType: '',
+    description: '',
+  };
+
+  const [initialValues, setInitialValues] = useState(EMPTY_VALUES);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [serverDown, setServerDown] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     fetch(`http://localhost:5000/api/events/${slug}`)
@@ -42,51 +78,73 @@ export default function EditEventPage({ params }: { params: Promise<{ slug: stri
         return r.json();
       })
       .then((data) => {
-        const { title, image, date, time, slug: s, location, description } = data.data;
-        setForm({ title, image, date, time, slug: s, location, description });
+        const { title, image, date, time, slug: s, location, eventType, description } = data.data;
+        setInitialValues({
+          title: title ?? '',
+          image: image ?? '',
+          date: date ?? '',
+          time: time ?? '',
+          slug: s ?? '',
+          location: location ?? '',
+          eventType: eventType ?? '',
+          description: description ?? '',
+        });
+        setIsLoaded(true);
       })
-      .catch((err: unknown) =>
-        setLoadError(err instanceof Error ? err.message : 'Unexpected error')
-      );
+      .catch((err: unknown) => {
+        if (err instanceof TypeError) {
+          setServerDown(true);
+        } else {
+          setLoadError(err instanceof Error ? err.message : 'Failed to load event');
+        }
+        setIsLoaded(true);
+      });
   }, [slug]);
 
-  function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    const { name, value } = e.target;
-    setForm((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, [name]: value };
-      if (name === 'title') updated.slug = slugify(value);
-      return updated;
-    });
-  }
+  const formik = useFormik({
+    initialValues,
+    validationSchema,
+    enableReinitialize: true,
+    onSubmit: async (values, { setStatus }) => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/events/${slug}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify(values),
+        });
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!form) return;
-    setSubmitError(null);
-    setLoading(true);
+        const data = await res.json();
 
-    try {
-      const res = await fetch(`http://localhost:5000/api/events/${slug}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Something went wrong');
+        }
 
-      const data: { success: boolean; data?: EventFormData } | ApiError = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error((data as ApiError).message || 'Something went wrong');
+        const newSlug = data.data?.slug ?? slug;
+        router.push(`/events/${newSlug}`);
+      } catch (err: unknown) {
+        setStatus(err instanceof Error ? err.message : 'Unexpected error');
       }
+    },
+  });
 
-      const newSlug = (data as { success: true; data: EventFormData }).data.slug;
-      router.push(`/events/${newSlug}`);
-    } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : 'Unexpected error');
-    } finally {
-      setLoading(false);
+  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    formik.handleChange(e);
+    if (!formik.touched.slug) {
+      formik.setFieldValue('slug', slugify(e.target.value));
     }
   }
+
+  if (!isAuthenticated) return null;
+
+  if (!isLoaded) {
+    return (
+      <div className="flex justify-center items-center min-h-[40vh]">
+        <p className="text-white/50">Loading event…</p>
+      </div>
+    );
+  }
+
+  if (serverDown) return <ServerDown />;
 
   if (loadError) {
     return (
@@ -96,151 +154,187 @@ export default function EditEventPage({ params }: { params: Promise<{ slug: stri
     );
   }
 
-  if (!form) {
-    return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <p className="text-white/50">Loading event…</p>
-      </div>
-    );
-  }
-
   return (
     <section className="max-w-2xl mx-auto px-4 py-16">
       <h1 className="text-3xl font-bold mb-2">Edit Event</h1>
       <p className="text-white/50 mb-10">Update the details below and save your changes.</p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Field label="Title" required>
-          <input
-            type="text"
+      <form onSubmit={formik.handleSubmit} className="space-y-6">
+        {/* Title */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="title">
+            Title <span className="text-indigo-400">*</span>
+          </Label>
+          <Input
+            id="title"
             name="title"
-            value={form.title}
-            onChange={handleChange}
-            required
+            placeholder="e.g. Next.js Conf 2026"
+            value={formik.values.title}
+            onChange={handleTitleChange}
+            onBlur={formik.handleBlur}
+            className={formik.touched.title && formik.errors.title ? 'border-red-500' : ''}
           />
-        </Field>
-
-        <Field label="Image URL" required>
-          <input
-            type="url"
-            name="image"
-            value={form.image}
-            onChange={handleChange}
-            required
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Date" required>
-            <input
-              type="date"
-              name="date"
-              value={form.date}
-              onChange={handleChange}
-              required
-            />
-          </Field>
-          <Field label="Time" required>
-            <input
-              type="time"
-              name="time"
-              value={form.time}
-              onChange={handleChange}
-              required
-            />
-          </Field>
+          {formik.touched.title && formik.errors.title && (
+            <p className="text-red-400 text-xs">{formik.errors.title}</p>
+          )}
         </div>
 
-        <Field label="Location" required>
-          <input
-            type="text"
+        {/* Image URL */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="image">
+            Image URL <span className="text-indigo-400">*</span>
+          </Label>
+          <Input
+            id="image"
+            name="image"
+            type="url"
+            placeholder="https://example.com/image.png"
+            value={formik.values.image}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            className={formik.touched.image && formik.errors.image ? 'border-red-500' : ''}
+          />
+          {formik.touched.image && formik.errors.image && (
+            <p className="text-red-400 text-xs">{formik.errors.image}</p>
+          )}
+        </div>
+
+        {/* Date & Time */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="date">
+              Date <span className="text-indigo-400">*</span>
+            </Label>
+            <Input
+              id="date"
+              name="date"
+              type="date"
+              value={formik.values.date}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              className={formik.touched.date && formik.errors.date ? 'border-red-500' : ''}
+            />
+            {formik.touched.date && formik.errors.date && (
+              <p className="text-red-400 text-xs">{formik.errors.date}</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="time">
+              Time <span className="text-indigo-400">*</span>
+            </Label>
+            <Input
+              id="time"
+              name="time"
+              type="time"
+              value={formik.values.time}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              className={formik.touched.time && formik.errors.time ? 'border-red-500' : ''}
+            />
+            {formik.touched.time && formik.errors.time && (
+              <p className="text-red-400 text-xs">{formik.errors.time}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Event Type */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="eventType">
+            Event Type <span className="text-indigo-400">*</span>
+          </Label>
+          <Select
+            value={formik.values.eventType}
+            onValueChange={(val) => formik.setFieldValue('eventType', val)}
+          >
+            <SelectTrigger
+              id="eventType"
+              className={formik.touched.eventType && formik.errors.eventType ? 'border-red-500' : ''}
+            >
+              <SelectValue placeholder="Select event type…" />
+            </SelectTrigger>
+            <SelectContent>
+              {EVENT_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {formik.touched.eventType && formik.errors.eventType && (
+            <p className="text-red-400 text-xs">{formik.errors.eventType}</p>
+          )}
+        </div>
+
+        {/* Location */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="location">
+            Location <span className="text-indigo-400">*</span>
+          </Label>
+          <Input
+            id="location"
             name="location"
-            value={form.location}
-            onChange={handleChange}
-            required
+            placeholder="e.g. San Francisco, CA"
+            value={formik.values.location}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            className={formik.touched.location && formik.errors.location ? 'border-red-500' : ''}
           />
-        </Field>
+          {formik.touched.location && formik.errors.location && (
+            <p className="text-red-400 text-xs">{formik.errors.location}</p>
+          )}
+        </div>
 
-        <Field label="Slug" hint="Auto-generated from title — edit if needed" required>
-          <input
-            type="text"
+        {/* Slug */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="slug">
+            Slug <span className="text-indigo-400">*</span>
+            <span className="ml-2 text-white/30 font-normal text-xs">Auto-generated from title — edit if needed</span>
+          </Label>
+          <Input
+            id="slug"
             name="slug"
-            value={form.slug}
-            onChange={handleChange}
-            required
+            placeholder="e.g. nextjs-conf-2026"
+            value={formik.values.slug}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            className={formik.touched.slug && formik.errors.slug ? 'border-red-500' : ''}
           />
-        </Field>
+          {formik.touched.slug && formik.errors.slug && (
+            <p className="text-red-400 text-xs">{formik.errors.slug}</p>
+          )}
+        </div>
 
-        <Field label="Description">
-          <textarea
+        {/* Description */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
             name="description"
-            value={form.description}
-            onChange={handleChange}
             rows={4}
+            placeholder="A short description of the event…"
+            value={formik.values.description}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
           />
-        </Field>
+        </div>
 
-        {submitError && (
+        {/* Error/load-error banner */}
+        {formik.status && (
           <p className="text-red-400 text-sm bg-red-400/10 border border-red-400/30 rounded-lg px-4 py-3">
-            {submitError}
+            {formik.status}
           </p>
         )}
 
+        {/* Actions */}
         <div className="flex items-center gap-4 pt-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-          >
-            {loading ? 'Saving…' : 'Save Changes'}
-          </button>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-6 py-2.5 rounded-lg border border-white/20 hover:border-white/40 transition-colors"
-          >
+          <Button type="submit" disabled={formik.isSubmitting} className="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white">
+            {formik.isSubmitting ? 'Saving…' : 'Save Changes'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => router.back()} className="cursor-pointer">
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </section>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  required,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-white/80">
-        {label}
-        {required && <span className="text-indigo-400 ml-0.5">*</span>}
-        {hint && <span className="ml-2 text-white/30 font-normal text-xs">{hint}</span>}
-      </label>
-      <div
-        className="
-          [&_input]:w-full [&_input]:bg-white/5 [&_input]:border [&_input]:border-white/10
-          [&_input]:rounded-lg [&_input]:px-4 [&_input]:py-2.5 [&_input]:text-sm
-          [&_input]:placeholder-white/20 [&_input]:outline-none
-          [&_input]:focus:border-indigo-500 [&_input]:focus:ring-1 [&_input]:focus:ring-indigo-500
-          [&_input]:transition-colors [&_input]:text-white
-          [&_textarea]:w-full [&_textarea]:bg-white/5 [&_textarea]:border [&_textarea]:border-white/10
-          [&_textarea]:rounded-lg [&_textarea]:px-4 [&_textarea]:py-2.5 [&_textarea]:text-sm
-          [&_textarea]:placeholder-white/20 [&_textarea]:outline-none [&_textarea]:resize-none
-          [&_textarea]:focus:border-indigo-500 [&_textarea]:focus:ring-1 [&_textarea]:focus:ring-indigo-500
-          [&_textarea]:transition-colors [&_textarea]:text-white
-        "
-      >
-        {children}
-      </div>
-    </div>
   );
 }

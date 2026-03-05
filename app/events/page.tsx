@@ -1,26 +1,39 @@
 'use client';
 import EventCard from "@/components/EventCard";
-import ExploreBtn from "@/components/ExploreBtn";
+import ServerDown from "@/components/ServerDown";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-
 
 export default function Page() {
   const [events, setEvents] = useState([]);
-  const getEvents = async () => {
-    const response = await fetch("http://localhost:5000/api/events");
-    const data = await response.json();
-    setEvents(data.data);
-  }
+  const [serverDown, setServerDown] = useState(false);
+
   useEffect(() => {
-    getEvents();
-  }, []);   
-  
-  return <section>
-    <h1 className="text-center">The Hub for Every Dev <br /> Event You Must't Miss</h1>
-    <p className="text-center mt-5">Hackathons, Meetups, and Conferences, All in One Place</p>
-    <ExploreBtn />
-    <div className="mt-20 space-y-7">
-      <h3 className="text-center">Featured Events</h3>
+    fetch("http://localhost:5000/api/events")
+      .then((r) => r.json())
+      .then((data) => { if (data.data) setEvents(data.data); })
+      .catch((err: unknown) => { if (err instanceof TypeError) setServerDown(true); });
+  }, []);
+
+  if (serverDown) return <ServerDown />;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-10">
+        <div>
+          <h1 className="text-4xl font-bold mb-2">All Events</h1>
+          <p className="text-white/50">Browse all upcoming developer events</p>
+        </div>
+        <Button asChild className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 cursor-pointer">
+          <Link href="/events/add">
+            <Plus className="w-4 h-4" />
+            Add New Event
+          </Link>
+        </Button>
+      </div>
+
       <ul className="events list-none">
         {events.map((event: any) => (
           <li key={event.title}>
@@ -28,6 +41,6 @@ export default function Page() {
           </li>
         ))}
       </ul>
-    </div>
-  </section>;
+    </section>
+  );
 }
