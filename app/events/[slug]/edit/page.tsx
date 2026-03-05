@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ServerDown from '@/components/ServerDown';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { API_URL } from '@/lib/api';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Input } from '@/components/ui/input';
@@ -72,7 +73,7 @@ export default function EditEventPage({ params }: { params: Promise<{ slug: stri
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/events/${slug}`)
+    fetch(`${API_URL}/api/events/${slug}`)
       .then((r) => {
         if (!r.ok) throw new Error('Event not found');
         return r.json();
@@ -107,7 +108,7 @@ export default function EditEventPage({ params }: { params: Promise<{ slug: stri
     enableReinitialize: true,
     onSubmit: async (values, { setStatus }) => {
       try {
-        const res = await fetch(`http://localhost:5000/api/events/${slug}`, {
+        const res = await fetch(`${API_URL}/api/events/${slug}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
           body: JSON.stringify(values),

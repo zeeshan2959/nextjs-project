@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { API_URL } from "@/lib/api";
 
 export default function Page() {
   const [events, setEvents] = useState([]);
   const [serverDown, setServerDown] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/events")
+    fetch(`${API_URL}/api/events`)
       .then((r) => r.json())
       .then((data) => { if (data.data) setEvents(data.data); })
       .catch((err: unknown) => { if (err instanceof TypeError) setServerDown(true); });

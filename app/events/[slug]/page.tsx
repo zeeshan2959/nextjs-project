@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ServerDown from "@/components/ServerDown";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_URL } from "@/lib/api";
 
 interface Event {
   title: string;
@@ -57,7 +58,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
   async function fetchBookings() {
     setBookingsLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/bookings/${slug}`);
+      const res = await fetch(`${API_URL}/api/bookings/${slug}`);
       const data = await res.json();
       if (data.success) setBookings(data.data);
     } finally {
@@ -68,7 +69,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
   useEffect(() => {
     const getEvent = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/events/${slug}`);
+        const response = await fetch(`${API_URL}/api/events/${slug}`);
         if (!response.ok) throw new Error("Event not found");
         const data = await response.json();
         setEvent(data.data);
@@ -98,7 +99,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
     setBookingError(null);
     setBookingLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/bookings", {
+      const res = await fetch(`${API_URL}/api/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({ eventSlug: slug, ...booking }),
@@ -118,7 +119,7 @@ const EventPage = ({ params }: { params: Promise<{ slug: string }> }) => {
   async function handleDelete() {
     setDeleting(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/events/${slug}`, {
+      const res = await fetch(`${API_URL}/api/events/${slug}`, {
         method: "DELETE",
         headers: { ...authHeader() },
       });
