@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { Suspense } from 'react';
+import { API_URL } from '@/lib/api';
 
 const validationSchema = Yup.object({
   email: Yup.string().email('Must be a valid email').required('Email is required'),
@@ -26,7 +27,7 @@ function LoginForm() {
     validationSchema,
     onSubmit: async (values, { setStatus }) => {
       try {
-        const res = await fetch('http://localhost:5000/api/auth/login', {
+        const res = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(values),

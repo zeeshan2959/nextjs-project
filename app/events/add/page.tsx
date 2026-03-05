@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { API_URL } from '@/lib/api';
 
 const EVENT_TYPES = [
   { value: 'hackathon', label: 'Hackathon' },
@@ -66,7 +67,7 @@ export default function AddEventPage() {
     validationSchema,
     onSubmit: async (values, { setStatus }) => {
       try {
-        const res = await fetch('http://localhost:5000/api/events', {
+        const res = await fetch(`${API_URL}/api/events`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
           body: JSON.stringify(values),

@@ -9,8 +9,7 @@ export default function ServerDown() {
       <div className="space-y-2">
         <h2 className="text-xl font-semibold text-white">Server is offline</h2>
         <p className="text-white/40 text-sm max-w-xs">
-          The API server isn&apos;t reachable. Make sure the backend is running on{' '}
-          <code className="text-indigo-400 font-mono text-xs">localhost:5000</code> and refresh the page.
+          The API server isn&apos;t reachable. Please try again later or refresh the page.
         </p>
       </div>
       <button
